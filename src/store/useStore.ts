@@ -4,7 +4,7 @@ import type { GameState, Habit, HabitLog } from '../types';
 import { FREE_HABIT_LIMIT } from '../types';
 import * as DB from '../db/database';
 import { todayStr } from '../utils/dates';
-import { resolveMissedDays, registerCompletion, xpForHabit } from '../engine/streak';
+import { resolveMissedDays, registerCompletion, xpForHabit, STAGE_THRESHOLDS } from '../engine/streak';
 import { requestNotificationPermissions, scheduleDailyReminder } from '../utils/notifications';
 
 interface StoreState {
@@ -37,6 +37,9 @@ interface StoreState {
   todayCompleted: () => number;
   todayFed: () => boolean;
   canAddHabit: () => boolean;
+
+  // Dev / cheat
+  cheatSetStage: (stage: number, species?: string) => Promise<void>;
 }
 
 const DEFAULT_GAME_STATE: GameState = {
@@ -208,4 +211,19 @@ export const useStore = create<StoreState>((set, get) => ({
   todayCompleted: () => get().todayLogs.filter(l => l.completed === 1).length,
   todayFed: () => get().todayLogs.some(l => l.completed === 1),
   canAddHabit: () => get().gameState.isPremium === 1 || get().habits.length < FREE_HABIT_LIMIT,
+
+  cheatSetStage: async (stage, species) => {
+    const s = Math.max(1, Math.min(6, stage));
+    const streak = STAGE_THRESHOLDS[s - 1] ?? 0;
+    const next: GameState = {
+      ...get().gameState,
+      maxStageReached: s,
+      currentStreak: streak,
+      longestStreak: Math.max(get().gameState.longestStreak, streak),
+      xp: s * 80,
+      ...(species ? { species } : {}),
+    };
+    set({ gameState: next });
+    await persistState(next);
+  },
 }));

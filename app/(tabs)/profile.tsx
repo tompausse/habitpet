@@ -1,15 +1,41 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useStore } from '@/src/store/useStore';
 import { STAGE_NAMES } from '@/src/engine/streak';
 import { Colors, Radius } from '@/src/theme';
 
-export default function ProfileScreen() {
-  const { gameState, habits } = useStore();
-  const { petName, species, currentStreak, longestStreak, maxStageReached, xp, freezes, isPremium } = gameState;
+const SPECIES_LIST = [
+  { id: 'mossy', label: '🌿 Mossy' },
+  { id: 'ember', label: '🔥 Ember' },
+  { id: 'aqua',  label: '💧 Aqua'  },
+];
 
+export default function ProfileScreen() {
+  const { gameState, habits, cheatSetStage } = useStore();
+  const { petName, species, currentStreak, longestStreak, maxStageReached, xp, freezes, isPremium } = gameState;
   const stageLabel = STAGE_NAMES[maxStageReached - 1] ?? 'Baby';
+
+  // Hidden dev mode: tap footer 7 times
+  const tapCount = useRef(0);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [devVisible, setDevVisible] = useState(false);
+
+  function handleFooterTap() {
+    tapCount.current += 1;
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    if (tapCount.current >= 7) {
+      tapCount.current = 0;
+      setDevVisible(v => !v);
+    } else {
+      tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 1800);
+    }
+  }
+
+  async function handleCheat(stage: number, sp?: string) {
+    await cheatSetStage(stage, sp ?? species);
+    Alert.alert('🎮 Cheat aktiv', `Stufe ${stage} · ${STAGE_NAMES[stage - 1]} (${sp ?? species})`);
+  }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -52,17 +78,64 @@ export default function ProfileScreen() {
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.actionRow}
-            onPress={() =>
-              Alert.alert('Benachrichtigungen', 'Tägliche Erinnerungen werden in Kürze konfigurierbar sein.')
-            }
+            style={[styles.actionRow, { borderBottomWidth: 0 }]}
+            onPress={() => Alert.alert('Benachrichtigungen', 'Tägliche Erinnerungen werden in Kürze konfigurierbar sein.')}
           >
             <Text style={styles.actionLabel}>🔔 Tägliche Erinnerung</Text>
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footer}>HabitPet v0.1 · made with ❤️ & Claude</Text>
+        {/* Dev mode panel */}
+        {devVisible && (
+          <View style={styles.devPanel}>
+            <Text style={styles.devTitle}>🎮 Dev Mode</Text>
+            <Text style={styles.devSub}>Spezies wechseln:</Text>
+            <View style={styles.devRow}>
+              {SPECIES_LIST.map(sp => (
+                <TouchableOpacity
+                  key={sp.id}
+                  style={[styles.devBtn, species === sp.id && styles.devBtnActive]}
+                  onPress={() => handleCheat(maxStageReached, sp.id)}
+                >
+                  <Text style={[styles.devBtnText, species === sp.id && styles.devBtnTextActive]}>
+                    {sp.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.devSub, { marginTop: 12 }]}>Stufe wählen:</Text>
+            <View style={styles.devRow}>
+              {STAGE_NAMES.map((name, i) => {
+                const stage = i + 1;
+                const active = maxStageReached === stage;
+                return (
+                  <TouchableOpacity
+                    key={stage}
+                    style={[styles.devBtn, active && styles.devBtnActive]}
+                    onPress={() => handleCheat(stage)}
+                  >
+                    <Text style={[styles.devBtnText, active && styles.devBtnTextActive]}>
+                      {stage}
+                    </Text>
+                    <Text style={[styles.devBtnSub, active && { color: Colors.mintDeep }]}>
+                      {name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.devHint}>Streaks & XP werden automatisch angepasst</Text>
+          </View>
+        )}
+
+        {/* Footer — tap 7× to unlock dev mode */}
+        <TouchableOpacity onPress={handleFooterTap} activeOpacity={1}>
+          <Text style={styles.footer}>
+            HabitPet v0.1 · made with ❤️ & Claude{devVisible ? ' 🎮' : ''}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -118,9 +191,31 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder,
+    paddingHorizontal: 16, paddingVertical: 15,
+    borderBottomWidth: 1, borderBottomColor: Colors.cardBorder,
   },
   actionLabel: { fontSize: 15, color: Colors.ink },
   actionArrow: { fontSize: 22, color: Colors.inkLight },
-  footer: { fontSize: 12, color: Colors.inkLight, textAlign: 'center', marginTop: 8 },
+
+  // Dev panel
+  devPanel: {
+    backgroundColor: '#1D1B2E', borderRadius: Radius.lg, padding: 18,
+    borderWidth: 1.5, borderColor: 'rgba(55,224,176,0.4)',
+    gap: 8,
+  },
+  devTitle: { fontSize: 16, fontWeight: '800', color: Colors.mint, letterSpacing: 1 },
+  devSub: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.55)', letterSpacing: 0.5 },
+  devRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  devBtn: {
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: Radius.md,
+    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', minWidth: 64,
+  },
+  devBtnActive: { backgroundColor: 'rgba(55,224,176,0.18)', borderColor: Colors.mint },
+  devBtnText: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.75)' },
+  devBtnTextActive: { color: Colors.mint },
+  devBtnSub: { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  devHint: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4, textAlign: 'center' },
+
+  footer: { fontSize: 12, color: Colors.inkLight, textAlign: 'center', marginTop: 8, paddingVertical: 8 },
 });
