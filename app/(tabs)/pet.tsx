@@ -1,8 +1,62 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  Modal, Animated, TextInput, Keyboard,
+  Modal, Animated, TextInput, Keyboard, Dimensions,
 } from 'react-native';
+
+const { width: SW, height: SH } = Dimensions.get('window');
+
+// Subtle animated background sparkles
+const SPARKLE_COUNT = 14;
+
+function BackgroundSparkles({ glowColor }: { glowColor: string }) {
+  const sparks = useRef(
+    Array.from({ length: SPARKLE_COUNT }, (_, i) => {
+      const anim = new Animated.Value(0);
+      return {
+        anim,
+        x: Math.random() * SW,
+        y: Math.random() * SH,
+        size: 2 + Math.random() * 3,
+        delay: i * 260,
+        duration: 2200 + Math.random() * 1800,
+      };
+    })
+  ).current;
+
+  useEffect(() => {
+    sparks.forEach(s => {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.delay(s.delay),
+          Animated.timing(s.anim, { toValue: 1, duration: s.duration / 2, useNativeDriver: true }),
+          Animated.timing(s.anim, { toValue: 0, duration: s.duration / 2, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+    });
+  }, []);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {sparks.map((s, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            position: 'absolute',
+            left: s.x,
+            top: s.y,
+            width: s.size,
+            height: s.size,
+            borderRadius: s.size / 2,
+            backgroundColor: glowColor,
+            opacity: s.anim,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useStore } from '@/src/store/useStore';
@@ -79,6 +133,7 @@ export default function PetScreen() {
   return (
     <View style={styles.root}>
       <LinearGradient colors={[Colors.bgDeep, Colors.bgMid, '#4A3187']} style={StyleSheet.absoluteFill} />
+      <BackgroundSparkles glowColor={stageConfig.glowColor} />
 
       <SafeAreaView style={styles.safe}>
         {/* HUD */}

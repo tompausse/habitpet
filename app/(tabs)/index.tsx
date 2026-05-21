@@ -205,52 +205,73 @@ interface HabitRowProps {
 function HabitRow({ habit, log, onBinaryTap, onQuantityTap }: HabitRowProps) {
   const done = log?.completed === 1;
   const checkScale = useRef(new Animated.Value(done ? 1 : 0)).current;
+  const xpY = useRef(new Animated.Value(0)).current;
+  const xpOp = useRef(new Animated.Value(0)).current;
   const prevDone = useRef(done);
 
   useEffect(() => {
     if (done === prevDone.current) return;
     prevDone.current = done;
     if (done) {
+      // Spring-bounce checkmark
       checkScale.setValue(0);
-      Animated.spring(checkScale, {
-        toValue: 1, useNativeDriver: true,
-        tension: 220, friction: 8,
-      }).start();
+      Animated.spring(checkScale, { toValue: 1, useNativeDriver: true, tension: 220, friction: 8 }).start();
+      // Float-up XP toast
+      xpY.setValue(0);
+      xpOp.setValue(1);
+      Animated.parallel([
+        Animated.timing(xpY, { toValue: -34, duration: 950, useNativeDriver: true }),
+        Animated.sequence([
+          Animated.delay(380),
+          Animated.timing(xpOp, { toValue: 0, duration: 570, useNativeDriver: true }),
+        ]),
+      ]).start();
     } else {
       Animated.timing(checkScale, { toValue: 0, duration: 120, useNativeDriver: true }).start();
+      xpOp.setValue(0);
     }
   }, [done]);
 
   const progress = habit.type === 'quantity' && habit.target
     ? Math.min(1, (log?.value ?? 0) / habit.target)
     : done ? 1 : 0;
+  const xpLabel = `+${habit.type === 'quantity' ? 15 : 10} XP ✨`;
 
   return (
-    <TouchableOpacity
-      style={[styles.habitRow, done && styles.habitRowDone]}
-      onPress={() => habit.type === 'binary' ? onBinaryTap() : onQuantityTap()}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.checkBox, done && styles.checkBoxDone]}>
-        <Animated.Text style={[styles.checkmark, { transform: [{ scale: checkScale }] }]}>✓</Animated.Text>
-      </View>
-      <View style={styles.habitBody}>
-        <Text style={[styles.habitTitle, done && styles.habitTitleDone]}>
-          {habit.icon} {habit.title}
-        </Text>
-        {habit.type === 'quantity' && habit.target ? (
-          <View>
-            <Text style={styles.habitSub}>{log?.value ?? 0} / {habit.target} {habit.unit}</Text>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+    <View>
+      <TouchableOpacity
+        style={[styles.habitRow, done && styles.habitRowDone]}
+        onPress={() => habit.type === 'binary' ? onBinaryTap() : onQuantityTap()}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.checkBox, done && styles.checkBoxDone]}>
+          <Animated.Text style={[styles.checkmark, { transform: [{ scale: checkScale }] }]}>✓</Animated.Text>
+        </View>
+        <View style={styles.habitBody}>
+          <Text style={[styles.habitTitle, done && styles.habitTitleDone]}>
+            {habit.icon} {habit.title}
+          </Text>
+          {habit.type === 'quantity' && habit.target ? (
+            <View>
+              <Text style={styles.habitSub}>{log?.value ?? 0} / {habit.target} {habit.unit}</Text>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+              </View>
             </View>
-          </View>
-        ) : (
-          <Text style={styles.habitSub}>{done ? 'Erledigt ✓' : 'Tippen zum Abhaken'}</Text>
-        )}
-      </View>
-      {habit.type === 'quantity' && <Text style={styles.logBtn}>📊</Text>}
-    </TouchableOpacity>
+          ) : (
+            <Text style={styles.habitSub}>{done ? 'Erledigt ✓' : 'Tippen zum Abhaken'}</Text>
+          )}
+        </View>
+        {habit.type === 'quantity' && <Text style={styles.logBtn}>📊</Text>}
+      </TouchableOpacity>
+      {/* Floating XP toast — always rendered, animates in/out */}
+      <Animated.Text
+        style={[styles.xpToast, { transform: [{ translateY: xpY }], opacity: xpOp }]}
+        pointerEvents="none"
+      >
+        {xpLabel}
+      </Animated.Text>
+    </View>
   );
 }
 
@@ -329,6 +350,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full, marginTop: 8,
   },
   addBtnText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
+  xpToast: {
+    position: 'absolute', top: 8, left: 54,
+    fontSize: 13, fontWeight: '800', color: Colors.mintDeep,
+  },
   freezeHint: {
     backgroundColor: 'rgba(126,200,255,0.12)', borderRadius: Radius.md,
     padding: 12, borderWidth: 1, borderColor: 'rgba(126,200,255,0.3)',
