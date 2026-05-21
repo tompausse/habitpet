@@ -3,6 +3,9 @@ import { daysBetween, yesterdayOf } from '../utils/dates';
 
 /** Streak thresholds (in consecutive days) that unlock each evolution stage. */
 export const STAGE_THRESHOLDS = [0, 7, 14, 30, 90, 365];
+
+/** XP needed for one full cycle of the within-stage energy bar. */
+export const XP_PER_STAGE_FILL = 100;
 export const STAGE_NAMES = ['Baby', 'Kind', 'Jungtier', 'Gefährte', 'Wächter', 'Legende'];
 export const MAX_STAGE = STAGE_THRESHOLDS.length; // 6
 

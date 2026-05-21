@@ -1,7 +1,8 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber/native';
 import * as THREE from 'three';
 import type { StageConfig } from '../game/creatures';
+import { CreatureErrorBoundary } from './CreatureErrorBoundary';
 
 // ---------- Individual mesh parts ----------
 
@@ -231,21 +232,23 @@ interface Creature3DProps {
 }
 
 export function Creature3D({ config, mood = 'happy', size = 260 }: Creature3DProps) {
-  const cameraZ = 3.8 / config.scale; // zoom out for bigger creatures
+  const cameraZ = 3.8 / config.scale;
 
   return (
-    <Canvas
-      style={{ width: size, height: size }}
-      gl={{ antialias: true, alpha: true }}
-      camera={{ position: [0, 0.1, cameraZ], fov: 55 }}
-      onCreated={({ gl }) => {
-        gl.setClearColor(0x000000, 0); // transparent background
-      }}
-    >
-      <ambientLight intensity={0.85} />
-      <directionalLight position={[3, 5, 5]} intensity={1.1} castShadow={false} />
-      <pointLight position={[-2, 2, 4]} intensity={0.55} color={config.glowColor} />
-      <CreatureGroup config={config} mood={mood} />
-    </Canvas>
+    <CreatureErrorBoundary config={config} size={size}>
+      <Canvas
+        style={{ width: size, height: size }}
+        gl={{ antialias: true, alpha: true }}
+        camera={{ position: [0, 0.1, cameraZ], fov: 55 }}
+        onCreated={({ gl }) => {
+          gl.setClearColor(0x000000, 0);
+        }}
+      >
+        <ambientLight intensity={0.85} />
+        <directionalLight position={[3, 5, 5]} intensity={1.1} castShadow={false} />
+        <pointLight position={[-2, 2, 4]} intensity={0.55} color={config.glowColor} />
+        <CreatureGroup config={config} mood={mood} />
+      </Canvas>
+    </CreatureErrorBoundary>
   );
 }

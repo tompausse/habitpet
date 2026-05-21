@@ -7,7 +7,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useStore } from '@/src/store/useStore';
 import { Colors, Radius } from '@/src/theme';
 
-const ICONS = ['⭐', '🏃', '📚', '💧', '🛏️', '🧘', '💪', '🎵', '🍎', '✍️', '🚶', '🧹', '🌅', '💊', '🧠'];
+const ICONS = [
+  '⭐', '🏃', '📚', '💧', '🛏️', '🧘', '💪', '🎵', '🍎', '✍️',
+  '🚶', '🧹', '🌅', '💊', '🧠', '🚴', '🏊', '🧗', '⚽', '🥗',
+  '☕', '📝', '🎯', '🛁', '💬', '🎸', '🌿', '🦷', '😴', '🔑',
+];
 const UNITS = ['min', 'Seiten', 'Gläser', 'km', 'mal', 'h', 'Sätze', 'Runden'];
 
 export default function HabitEditScreen() {
@@ -66,8 +70,13 @@ export default function HabitEditScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Icon picker */}
-        <Text style={styles.label}>Icon</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.iconRow} contentContainerStyle={{ gap: 8 }}>
+        <View style={styles.iconHeaderRow}>
+          <Text style={styles.label}>Icon</Text>
+          <View style={styles.iconPreview}>
+            <Text style={styles.iconPreviewText}>{icon}</Text>
+          </View>
+        </View>
+        <View style={styles.iconGrid}>
           {ICONS.map(ic => (
             <TouchableOpacity
               key={ic}
@@ -77,7 +86,7 @@ export default function HabitEditScreen() {
               <Text style={styles.iconText}>{ic}</Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </View>
 
         {/* Title */}
         <Text style={styles.label}>Name</Text>
@@ -162,9 +171,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 13,
     fontSize: 16, color: Colors.ink, marginTop: 4,
   },
-  iconRow: { flexGrow: 0, marginTop: 8 },
+  iconHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
+  iconPreview: {
+    width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(19,185,140,0.12)',
+    borderWidth: 1.5, borderColor: Colors.mintDeep, alignItems: 'center', justifyContent: 'center',
+  },
+  iconPreviewText: { fontSize: 22 },
+  iconGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8,
+  },
   iconBtn: {
-    width: 44, height: 44, borderRadius: 12, borderWidth: 2, borderColor: Colors.cardBorder,
+    width: 46, height: 46, borderRadius: 12, borderWidth: 2, borderColor: Colors.cardBorder,
     alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.card,
   },
   iconBtnSelected: { borderColor: Colors.mintDeep, backgroundColor: 'rgba(19,185,140,0.1)' },

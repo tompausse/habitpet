@@ -1,34 +1,87 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView,
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
+  Modal, Animated, TextInput, Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useStore } from '@/src/store/useStore';
 import { getStageConfig } from '@/src/game/creatures';
 import { Creature3D } from '@/src/components/Creature3D';
-import { STAGE_THRESHOLDS, STAGE_NAMES, daysToNextStage, MAX_STAGE } from '@/src/engine/streak';
+import { STAGE_THRESHOLDS, STAGE_NAMES, daysToNextStage, MAX_STAGE, XP_PER_STAGE_FILL } from '@/src/engine/streak';
 import { Colors, Radius } from '@/src/theme';
 
 export default function PetScreen() {
-  const { gameState, todayLogs } = useStore();
+  const { gameState, todayLogs, setSpeciesAndName } = useStore();
   const { species, petName, currentStreak, longestStreak, maxStageReached, xp, freezes, health, isPremium } = gameState;
 
   const stageConfig = useMemo(() => getStageConfig(species, maxStageReached), [species, maxStageReached]);
-
   const todayFed = todayLogs.some(l => l.completed === 1);
   const mood = todayFed ? 'happy' : health < 40 ? 'sad' : 'neutral';
   const nextStageInfo = daysToNextStage(currentStreak);
-
   const moodLabel = mood === 'happy' ? '😊 Bestens gelaunt · satt' : mood === 'sad' ? '😔 Hungrig · braucht dich' : '😐 Wartet auf dich';
+
+  // XP energy bar
+  const xpInBar = xp % XP_PER_STAGE_FILL;
+  const xpBarPct = xpInBar / XP_PER_STAGE_FILL;
+
+  // Evolution celebration modal
+  const prevMaxStageRef = useRef<number | null>(null);
+  const [showEvolution, setShowEvolution] = useState(false);
+  const [celebStage, setCelebStage] = useState(1);
+  const celebScale = useRef(new Animated.Value(0.3)).current;
+  const celebOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (prevMaxStageRef.current === null) {
+      prevMaxStageRef.current = maxStageReached;
+      return;
+    }
+    if (maxStageReached > prevMaxStageRef.current) {
+      setCelebStage(maxStageReached);
+      prevMaxStageRef.current = maxStageReached;
+      celebScale.setValue(0.3);
+      celebOpacity.setValue(0);
+      setShowEvolution(true);
+      Animated.parallel([
+        Animated.spring(celebScale, { toValue: 1, useNativeDriver: true, tension: 55, friction: 7 }),
+        Animated.timing(celebOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [maxStageReached]);
+
+  const dismissEvolution = () => {
+    Animated.timing(celebOpacity, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => {
+      setShowEvolution(false);
+    });
+  };
+
+  // Inline pet name editing
+  const [editing, setEditing] = useState(false);
+  const [nameInput, setNameInput] = useState(petName);
+  const nameInputRef = useRef<TextInput>(null);
+
+  const startEditing = () => {
+    setNameInput(petName);
+    setEditing(true);
+    setTimeout(() => nameInputRef.current?.focus(), 80);
+  };
+
+  const commitName = () => {
+    const trimmed = nameInput.trim();
+    setEditing(false);
+    Keyboard.dismiss();
+    if (trimmed && trimmed !== petName) {
+      setSpeciesAndName(species, trimmed);
+    }
+  };
 
   return (
     <View style={styles.root}>
-      {/* Background gradient */}
       <LinearGradient colors={[Colors.bgDeep, Colors.bgMid, '#4A3187']} style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={styles.safe}>
-        {/* HUD top */}
+        {/* HUD */}
         <View style={styles.hud}>
           <View style={styles.pill}>
             <Text style={styles.pillIcon}>🔥</Text>
@@ -60,6 +113,14 @@ export default function PetScreen() {
               <View key={i} style={[styles.seg, i < maxStageReached && styles.segOn]} />
             ))}
           </View>
+          {/* XP energy bar */}
+          <View style={styles.xpBarRow}>
+            <Text style={styles.xpLabel}>⚡ Energie</Text>
+            <View style={styles.xpTrack}>
+              <View style={[styles.xpFill, { width: `${Math.round(xpBarPct * 100)}%` as any }]} />
+            </View>
+            <Text style={styles.xpCount}>{xpInBar}/{XP_PER_STAGE_FILL}</Text>
+          </View>
           <Text style={styles.stageSub}>
             {nextStageInfo
               ? `Noch ${nextStageInfo.daysLeft} Streak-Tage bis Stufe ${nextStageInfo.nextStage} ✦`
@@ -86,11 +147,44 @@ export default function PetScreen() {
           <StatChip label="Gesundheit" value={`${health}%`} />
         </View>
 
-        {/* Name */}
+        {/* Pet name (tap to edit) */}
         <View style={styles.nameRow}>
-          <Text style={styles.petName}>{petName}</Text>
+          {editing ? (
+            <TextInput
+              ref={nameInputRef}
+              style={styles.nameInput}
+              value={nameInput}
+              onChangeText={setNameInput}
+              onBlur={commitName}
+              onSubmitEditing={commitName}
+              maxLength={20}
+              returnKeyType="done"
+              selectTextOnFocus
+            />
+          ) : (
+            <TouchableOpacity onPress={startEditing} activeOpacity={0.7}>
+              <Text style={styles.petName}>{petName} ✏️</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
+
+      {/* Evolution celebration modal */}
+      <Modal visible={showEvolution} transparent animationType="none" statusBarTranslucent>
+        <TouchableOpacity style={styles.celebOverlay} activeOpacity={1} onPress={dismissEvolution}>
+          <Animated.View style={[styles.celebCard, { transform: [{ scale: celebScale }], opacity: celebOpacity }]}>
+            <Text style={styles.celebStars}>✨🎉✨</Text>
+            <Text style={styles.celebTitle}>EVOLUTION!</Text>
+            <Text style={styles.celebStageName}>{STAGE_NAMES[celebStage - 1]}</Text>
+            <Text style={styles.celebSub}>Dein Tierchen hat Stufe {celebStage} erreicht!</Text>
+            <Creature3D config={getStageConfig(species, celebStage)} mood="happy" size={180} />
+            <Text style={styles.celebStars}>🌟⭐🌟</Text>
+            <TouchableOpacity style={styles.celebBtn} onPress={dismissEvolution}>
+              <Text style={styles.celebBtnText}>Weiter</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -124,14 +218,24 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 16, fontWeight: '800', color: Colors.white },
   pillSub: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
 
-  stageBlock: { alignItems: 'center', marginTop: 14, gap: 8 },
+  stageBlock: { alignItems: 'center', marginTop: 14, gap: 7 },
   stageName: { fontSize: 13, letterSpacing: 2.5, fontWeight: '800', color: 'rgba(255,255,255,0.85)' },
   segBar: { flexDirection: 'row', gap: 6 },
   seg: { width: 26, height: 5, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.22)' },
   segOn: { backgroundColor: '#FFD36E' },
+
+  xpBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
+  xpLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '600', width: 64 },
+  xpTrack: {
+    flex: 1, height: 6, borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden',
+  },
+  xpFill: { height: '100%', borderRadius: 3, backgroundColor: Colors.mint },
+  xpCount: { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '500', width: 44, textAlign: 'right' },
+
   stageSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
 
-  creatureContainer: { marginTop: 8, alignItems: 'center', justifyContent: 'center', width: 300, height: 300 },
+  creatureContainer: { marginTop: 4, alignItems: 'center', justifyContent: 'center', width: 300, height: 300 },
   glow: {
     position: 'absolute', width: 260, height: 260, borderRadius: 130,
     backgroundColor: 'transparent',
@@ -158,4 +262,33 @@ const styles = StyleSheet.create({
 
   nameRow: { marginTop: 12 },
   petName: { fontSize: 22, fontWeight: '800', color: 'rgba(255,255,255,0.9)', letterSpacing: 0.5 },
+  nameInput: {
+    fontSize: 22, fontWeight: '800', color: Colors.white, letterSpacing: 0.5,
+    borderBottomWidth: 2, borderBottomColor: Colors.mint, minWidth: 120, textAlign: 'center',
+    paddingVertical: 2, paddingHorizontal: 8,
+  },
+
+  // Evolution celebration
+  celebOverlay: {
+    flex: 1, backgroundColor: 'rgba(18,8,50,0.88)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  celebCard: {
+    backgroundColor: '#1D1040', borderRadius: 28, padding: 32,
+    alignItems: 'center', gap: 10, maxWidth: 320, width: '85%',
+    borderWidth: 1, borderColor: 'rgba(255,211,110,0.4)',
+    shadowColor: '#FFD36E', shadowOpacity: 0.35, shadowRadius: 30, shadowOffset: { width: 0, height: 0 },
+  },
+  celebStars: { fontSize: 28, letterSpacing: 4 },
+  celebTitle: {
+    fontSize: 30, fontWeight: '900', color: '#FFD36E',
+    letterSpacing: 3, textShadowColor: 'rgba(255,211,110,0.5)', textShadowRadius: 12, textShadowOffset: { width: 0, height: 0 },
+  },
+  celebStageName: { fontSize: 20, fontWeight: '800', color: Colors.white, letterSpacing: 1.5 },
+  celebSub: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '500', textAlign: 'center' },
+  celebBtn: {
+    marginTop: 8, backgroundColor: Colors.mint, paddingHorizontal: 40, paddingVertical: 14,
+    borderRadius: Radius.full,
+  },
+  celebBtnText: { fontSize: 16, fontWeight: '800', color: Colors.bgDeep },
 });

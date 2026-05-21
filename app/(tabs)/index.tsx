@@ -1,15 +1,71 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, TextInput, Modal,
+  SafeAreaView, TextInput, Modal, Animated,
 } from 'react-native';
+import dayjs from 'dayjs';
 import { router } from 'expo-router';
 import { useStore } from '@/src/store/useStore';
-import { Habit } from '@/src/types';
+import { Habit, HabitLog } from '@/src/types';
 import { Colors, Radius } from '@/src/theme';
+import { getStreakHistory } from '@/src/db/database';
+
+const DE_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+interface DayCell {
+  dateStr: string;
+  label: string;
+  num: string;
+  isToday: boolean;
+}
+
+function WeekCalendar({ today, todayActive }: { today: string; todayActive: boolean }) {
+  const [activityMap, setActivityMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const from = dayjs(today).subtract(6, 'day').format('YYYY-MM-DD');
+    getStreakHistory(from, today).then(rows => {
+      const map: Record<string, boolean> = {};
+      rows.forEach(r => { map[r.date] = r.count > 0; });
+      setActivityMap(map);
+    }).catch(() => {});
+  }, [today]);
+
+  const days: DayCell[] = Array.from({ length: 7 }, (_, i) => {
+    const d = dayjs(today).subtract(6 - i, 'day');
+    return {
+      dateStr: d.format('YYYY-MM-DD'),
+      label: DE_DAYS[d.day()],
+      num: d.format('D'),
+      isToday: i === 6,
+    };
+  });
+
+  return (
+    <View style={calStyles.card}>
+      {days.map(({ dateStr, label, num, isToday }) => {
+        const active = isToday ? todayActive : (activityMap[dateStr] ?? false);
+        return (
+          <View key={dateStr} style={calStyles.col}>
+            <Text style={[calStyles.dayLabel, isToday && calStyles.dayLabelToday]}>{label}</Text>
+            <View style={[
+              calStyles.circle,
+              active && calStyles.circleActive,
+              isToday && !active && calStyles.circleToday,
+            ]}>
+              <Text style={[calStyles.dayNum, active && calStyles.dayNumActive, isToday && !active && calStyles.dayNumToday]}>
+                {num}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function HeuteScreen() {
-  const { habits, todayLogs, gameState, logHabit, uncompleteHabit } = useStore();
+  const { habits, todayLogs, gameState, today, logHabit, uncompleteHabit } = useStore();
   const { petName, currentStreak, freezes } = gameState;
   const [quantityHabit, setQuantityHabit] = useState<Habit | null>(null);
   const [quantityInput, setQuantityInput] = useState('');
@@ -57,6 +113,10 @@ export default function HeuteScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        {/* 7-day streak calendar */}
+        <WeekCalendar today={today} todayActive={fed} />
+
+        {/* Fed / waiting banner */}
         <View style={[styles.fedBanner, fed ? styles.fedBannerOk : styles.fedBannerWait]}>
           <Text style={styles.fedIcon}>{fed ? '✅' : '⏳'}</Text>
           <View style={{ flex: 1 }}>
@@ -73,48 +133,24 @@ export default function HeuteScreen() {
 
         {habits.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📝</Text>
-            <Text style={styles.emptyTitle}>Noch keine Habits</Text>
-            <Text style={styles.emptySub}>Erstelle deinen ersten Habit im Habits-Tab.</Text>
+            <Text style={styles.emptyIcon}>🐾</Text>
+            <Text style={styles.emptyTitle}>Keine Habits — kein Futter!</Text>
+            <Text style={styles.emptySub}>Dein Tierchen wartet hungrig auf dich. Erstelle deinen ersten Habit, damit es wachsen kann.</Text>
             <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/(tabs)/habits')}>
-              <Text style={styles.addBtnText}>Habits erstellen →</Text>
+              <Text style={styles.addBtnText}>Ersten Habit erstellen →</Text>
             </TouchableOpacity>
           </View>
         ) : (
           habits.map(habit => {
             const log = getLog(habit.id);
-            const done = log?.completed === 1;
-            const progress = habit.type === 'quantity' && habit.target
-              ? Math.min(1, (log?.value ?? 0) / habit.target)
-              : done ? 1 : 0;
-
             return (
-              <TouchableOpacity
+              <HabitRow
                 key={habit.id}
-                style={[styles.habitRow, done && styles.habitRowDone]}
-                onPress={() => habit.type === 'binary' ? handleBinaryTap(habit) : handleQuantityTap(habit)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.checkBox, done && styles.checkBoxDone]}>
-                  {done && <Text style={styles.checkmark}>✓</Text>}
-                </View>
-                <View style={styles.habitBody}>
-                  <Text style={[styles.habitTitle, done && styles.habitTitleDone]}>
-                    {habit.icon} {habit.title}
-                  </Text>
-                  {habit.type === 'quantity' && habit.target ? (
-                    <View>
-                      <Text style={styles.habitSub}>{log?.value ?? 0} / {habit.target} {habit.unit}</Text>
-                      <View style={styles.progressBar}>
-                        <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
-                      </View>
-                    </View>
-                  ) : (
-                    <Text style={styles.habitSub}>{done ? 'Erledigt ✓' : 'Tippen zum Abhaken'}</Text>
-                  )}
-                </View>
-                {habit.type === 'quantity' && <Text style={styles.logBtn}>📊</Text>}
-              </TouchableOpacity>
+                habit={habit}
+                log={log}
+                onBinaryTap={() => handleBinaryTap(habit)}
+                onQuantityTap={() => handleQuantityTap(habit)}
+              />
             );
           })
         )}
@@ -157,6 +193,88 @@ export default function HeuteScreen() {
     </SafeAreaView>
   );
 }
+
+// Animated habit row
+interface HabitRowProps {
+  habit: Habit;
+  log: HabitLog | undefined;
+  onBinaryTap: () => void;
+  onQuantityTap: () => void;
+}
+
+function HabitRow({ habit, log, onBinaryTap, onQuantityTap }: HabitRowProps) {
+  const done = log?.completed === 1;
+  const checkScale = useRef(new Animated.Value(done ? 1 : 0)).current;
+  const prevDone = useRef(done);
+
+  useEffect(() => {
+    if (done === prevDone.current) return;
+    prevDone.current = done;
+    if (done) {
+      checkScale.setValue(0);
+      Animated.spring(checkScale, {
+        toValue: 1, useNativeDriver: true,
+        tension: 220, friction: 8,
+      }).start();
+    } else {
+      Animated.timing(checkScale, { toValue: 0, duration: 120, useNativeDriver: true }).start();
+    }
+  }, [done]);
+
+  const progress = habit.type === 'quantity' && habit.target
+    ? Math.min(1, (log?.value ?? 0) / habit.target)
+    : done ? 1 : 0;
+
+  return (
+    <TouchableOpacity
+      style={[styles.habitRow, done && styles.habitRowDone]}
+      onPress={() => habit.type === 'binary' ? onBinaryTap() : onQuantityTap()}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.checkBox, done && styles.checkBoxDone]}>
+        <Animated.Text style={[styles.checkmark, { transform: [{ scale: checkScale }] }]}>✓</Animated.Text>
+      </View>
+      <View style={styles.habitBody}>
+        <Text style={[styles.habitTitle, done && styles.habitTitleDone]}>
+          {habit.icon} {habit.title}
+        </Text>
+        {habit.type === 'quantity' && habit.target ? (
+          <View>
+            <Text style={styles.habitSub}>{log?.value ?? 0} / {habit.target} {habit.unit}</Text>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.habitSub}>{done ? 'Erledigt ✓' : 'Tippen zum Abhaken'}</Text>
+        )}
+      </View>
+      {habit.type === 'quantity' && <Text style={styles.logBtn}>📊</Text>}
+    </TouchableOpacity>
+  );
+}
+
+// Week calendar styles
+const calStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
+    paddingVertical: 14, paddingHorizontal: 12,
+    borderWidth: 1, borderColor: Colors.cardBorder,
+  },
+  col: { alignItems: 'center', gap: 6, flex: 1 },
+  dayLabel: { fontSize: 11, fontWeight: '600', color: Colors.inkLight },
+  dayLabelToday: { color: Colors.mintDeep, fontWeight: '800' },
+  circle: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: '#F0EFF8', alignItems: 'center', justifyContent: 'center',
+  },
+  circleActive: { backgroundColor: Colors.mintDeep },
+  circleToday: { backgroundColor: 'transparent', borderWidth: 2, borderColor: Colors.mintDeep },
+  dayNum: { fontSize: 13, fontWeight: '700', color: Colors.inkMid },
+  dayNumActive: { color: Colors.white },
+  dayNumToday: { color: Colors.mintDeep },
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.sheet },
