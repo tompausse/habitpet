@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "habitpet",
+    "name": "HabitPet",
     "slug": "habitpet",
     "version": "1.0.0",
+    "description": "Habit Tracker × Tamagotchi — halte deine Streak und lass dein Tierchen wachsen.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "habitpet",
@@ -40,7 +41,15 @@
         }
       ],
       "expo-sqlite",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#37E0B0",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
